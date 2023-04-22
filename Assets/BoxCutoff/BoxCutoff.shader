@@ -1,25 +1,15 @@
 // Unity built-in shader source. Copyright (c) 2016 Unity Technologies. MIT license (see license.txt)
 
+//Modified*
+
 Shader "Custom/XYZCutoff"
 {
     Properties
     {
-        _XCutOff("X CutOff", Range(0,1)) = 1 //Interpolate 0 = full cutoff 1 = no cutoff
-        _YCutOff("Y CutOff", Range(0,1)) = 1 //Interpolate
-        _ZCutOff("Z CutOff", Range(0,1)) = 1 //Interpolate
-        _MinCutOff("Min CutOff", Float) = 0 //The X/Y/Z position in worldspace to represent 0% cutoff
-        _MaxCutOff("Max CutOff", Float) = 10 //The X/Y/Z position in worldspace to represent 100% cutoff
-        _CutOffFadeColor("CutOff Fade Color", Color) = (1,1,1,1)
-        [Toggle] _Reverse("Reverse",Float) = 0
-
-        //for section box
-        _Enable("Enable", float) = 0
-        _MinX("Min X", float) = 0
-        _MaxX("Max X", float) = 1
-        _MinY("Min Y", float) = 0
-        _MaxY("Max Y", float) = 1
-        _MinZ("Min Z", float) = 0
-        _MaxZ("Max Z", float) = 1
+        _Enable("Enable", Float) = 0
+        _Reverse("Reverse",Float) = 0
+        _Min("Min", Vector) = (0,0,0,0)
+        _Max("Max", Vector) = (0,0,0,0)
 
         _Color("Color", Color) = (1,1,1,1)
 
@@ -119,14 +109,10 @@ Shader "Custom/XYZCutoff"
             fixed _CutOffFadeColor;
             fixed _Reverse;
 
-            //for section box
-            fixed _MinX;
-            fixed _MaxX;
-            fixed _MinY;
-            fixed _MaxY;
-            fixed _MinZ;
-            fixed _MaxZ;
             fixed _Enable;
+            float3 _Min;
+            float3 _Max;
+            static const fixed EPSILON = 01E-4;
            
             #ifndef UNITY_STANDARD_CORE_FORWARD_INCLUDED
             #define UNITY_STANDARD_CORE_FORWARD_INCLUDED
@@ -150,52 +136,34 @@ Shader "Custom/XYZCutoff"
                 #if UNITY_PACK_WORLDPOS_WITH_TANGENT
                 half4 fragBase(VertexOutputForwardBase i) : SV_Target
                 {
-                    float xnormal = (1 - _Reverse) * ((_MaxCutOff - _MinCutOff) * _XCutOff - (i.tangentToWorldAndPackedData[0].w - _MinCutOff));
-                    float xreverse = _Reverse * ((_MinCutOff - _MaxCutOff) * (1 - _XCutOff) - (_MinCutOff - i.tangentToWorldAndPackedData[0].w));
-                    
-                    float ynormal = (1 - _Reverse) * ((_MaxCutOff - _MinCutOff) * _YCutOff - (i.tangentToWorldAndPackedData[1].w - _MinCutOff));
-                    float yreverse = _Reverse * ((_MinCutOff - _MaxCutOff) * (1 - _YCutOff) - (_MinCutOff - i.tangentToWorldAndPackedData[1].w));
+                    float x = (i.tangentToWorldAndPackedData[0].w - _Min.x) * (_Max.x - i.tangentToWorldAndPackedData[0].w);
+                    float y = (i.tangentToWorldAndPackedData[1].w - _Min.y) * (_Max.y - i.tangentToWorldAndPackedData[1].w);
+                    float z = (i.tangentToWorldAndPackedData[2].w - _Min.z) * (_Max.z - i.tangentToWorldAndPackedData[2].w);
 
-                    float znormal = (1 - _Reverse) * ((_MaxCutOff - _MinCutOff) * _ZCutOff - (i.tangentToWorldAndPackedData[2].w - _MinCutOff));
-                    float zreverse = _Reverse * ((_MinCutOff - _MaxCutOff) * (1 - _ZCutOff) - (_MinCutOff - i.tangentToWorldAndPackedData[2].w));
-
-                    clip((1 - floor(_XCutOff)) * (xnormal + xreverse));
-                    clip((1 - floor(_YCutOff)) * (ynormal + yreverse));
-                    clip((1 - floor(_ZCutOff)) * (znormal + zreverse));
-
-                    //float x = (i.tangentToWorldAndPackedData[0].w - _MinX) * (_MaxX - i.tangentToWorldAndPackedData[0].w);
-                    //float y = (i.tangentToWorldAndPackedData[1].w - _MinY) * (_MaxY - i.tangentToWorldAndPackedData[1].w);
-                    //float z = (i.tangentToWorldAndPackedData[2].w - _MinZ) * (_MaxZ - i.tangentToWorldAndPackedData[2].w);
-
-                    //clip(x * _Enable);
-                    //clip(y * _Enable);
-                    //clip(z * _Enable);
+                    //Adding EPSILON to add a little padding to prevent floating point errors
+                    //Use Step for && conditional, need to -EPSILON because clip() will clip only when negative value, 0 is will still show
+                    float xs = step(x+EPSILON,0);
+                    float ys = step(y+EPSILON,0);
+                    float zs = step(z+EPSILON,0);
+                    float xyz = ( _Reverse*2 - 1) * (xs+ys+zs - EPSILON);
+                    clip(_Enable * xyz);
 
                     return fragForwardBaseInternal(i); 
                 }
                 #else
                 half4 fragBase (VertexOutputForwardBase i) : SV_Target 
                 { 
-                    float xnormal = (1 - _Reverse) * ((_MaxCutOff - _MinCutOff) * _XCutOff - (i.posWorld.x - _MinCutOff));
-                    float xreverse = _Reverse * ((_MinCutOff - _MaxCutOff) * (1 - _XCutOff) - (_MinCutOff - i.posWorld.x));
+                    float x = (i.posWorld.x - _Min.x) * (_Max.x - i.posWorld.x);
+                    float y = (i.posWorld.y - _Min.y) * (_Max.y - i.posWorld.y);
+                    float z = (i.posWorld.z - _Min.z) * (_Max.z - i.posWorld.z);
 
-                    float ynormal = (1 - _Reverse) * ((_MaxCutOff - _MinCutOff) * _YCutOff - (i.posWorld.y - _MinCutOff));
-                    float yreverse = _Reverse * ((_MinCutOff - _MaxCutOff) * (1 - _YCutOff) - (_MinCutOff - i.posWorld.y));
-
-                    float znormal = (1 - _Reverse) * ((_MaxCutOff - _MinCutOff) * _ZCutOff - (i.posWorld.z - _MinCutOff));
-                    float zreverse = _Reverse * ((_MinCutOff - _MaxCutOff) * (1 - _ZCutOff) - (_MinCutOff - i.posWorld.z));
-
-                    clip((1 - floor(_XCutOff))* (xnormal + xreverse));
-                    clip((1 - floor(_YCutOff))* (ynormal + yreverse));
-                    clip((1 - floor(_ZCutOff))* (znormal + zreverse));
-
-                    float x = (i.posWorld.x - _MinX) * (_MaxX - i.posWorld.x);
-                    float y = (i.posWorld.y - _MinY) * (_MaxY - i.posWorld.y);
-                    float z = (i.posWorld.z - _MinZ) * (_MaxZ - i.posWorld.z);
-
-                    clip(x* _Enable);
-                    clip(y* _Enable);
-                    clip(z* _Enable);
+                     //Adding EPSILON to add a little padding to prevent floating point errors
+                    //Use Step for && conditional, need to -EPSILON because clip() will clip only when negative value, 0 is will still show
+                    float xs = step(x+EPSILON,0);
+                    float ys = step(y+EPSILON,0);
+                    float zs = step(z+EPSILON,0);
+                    float xyz = ( _Reverse*2 - 1) * (xs+ys+zs - EPSILON);
+                    clip(_Enable * xyz);
 
                     return fragForwardBaseInternal(i); 
                 }
@@ -205,7 +173,6 @@ Shader "Custom/XYZCutoff"
 
             ENDCG
         }
-        /* Remove additive forward pass
 
         // ------------------------------------------------------------------
         //  Additive forward pass (one light per pass)
@@ -242,7 +209,7 @@ Shader "Custom/XYZCutoff"
 
             ENDCG
         }
-        */
+        
         // ------------------------------------------------------------------
         //  Shadow rendering pass
         Pass {
@@ -455,6 +422,5 @@ Shader "Custom/XYZCutoff"
     }
 
     FallBack "VertexLit"
-    //CustomEditor "StandardShaderGUI"
-    CustomEditor "XYZCuttoffGUI"
+    CustomEditor "StandardShaderGUI"
 }
